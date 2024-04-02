@@ -1,7 +1,22 @@
 #!/bin/bash
 
+# wget -qO- https://raw.githubusercontent.com/sharrajesh/xz-scan/main/xz-scan.sh | bash
+# curl -sSL https://raw.githubusercontent.com/sharrajesh/xz-scan/main/xz-scan.sh | bash
+
 echo "Starting the scan..."
 
+if ! command -v file >/dev/null; then
+    echo "Error: 'file' command not found. Please install it and try again."
+    exit 1
+fi
+if ! command -v readelf >/dev/null; then
+    echo "Error: 'readelf' command not found. Please install it and try again."
+    exit 1
+fi
+if ! command -v awk >/dev/null; then
+    echo "Error: 'awk' command not found. Please install it and try again."
+    exit 1
+fi
 if command -v dpkg >/dev/null; then
     pkg_manager="dpkg"
 elif command -v rpm >/dev/null; then
@@ -14,7 +29,7 @@ else
 fi
 
 check_xz_version() {
-    echo Scanning for xz version in package manager...
+    echo "Checking xz version..."
     case $pkg_manager in
         dpkg)
             xz_version=$(dpkg -s xz-utils 2>/dev/null | grep '^Version:' | awk '{print $2}')
@@ -29,6 +44,7 @@ check_xz_version() {
             xz_version=$(pacman -Qi xz 2>/dev/null | grep '^Version' | awk '{print $3}')
             ;;
     esac
+
     if [ -n "$xz_version" ]; then
         echo "Detected xz version: $xz_version"
         if [[ "$xz_version" == "5.6"* ]]; then
@@ -46,7 +62,7 @@ scan_all_exes() {
   find / -type f -executable -print0 2>/dev/null | while IFS= read -r -d '' file; do
     if file "$file" | grep -q "dynamically linked"; then
         if ldd "$file" 2>/dev/null | grep -q "liblzma.so"; then
-            liblzma_path=$(ldd "$file" | grep -oP 'liblzma\.so\.\d+ => \K\S+')
+            liblzma_path=$(ldd "$file" | awk '/liblzma\.so\.[0-9]+ =>/ { print $3 }')
             if [ -n "$liblzma_path" ]; then
                 lzma_versions=$(readelf -s "$liblzma_path" 2>/dev/null | grep '@@XZ_' | awk '{print $NF}' | cut -d '@' -f 3 | sort -r -u | head -n 1)
                 for lzma_version in $lzma_versions; do
